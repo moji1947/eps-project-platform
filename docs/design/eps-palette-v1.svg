@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760">
+  <defs>
+    <style>
+      .title { font: 700 42px/1.1 Arial, sans-serif; letter-spacing: -1.2px; }
+      .subtitle { font: 400 18px/1.5 Arial, sans-serif; }
+      .label { font: 700 14px/1 Arial, sans-serif; letter-spacing: .8px; }
+      .value { font: 400 13px/1 Arial, sans-serif; }
+      .sample { font: 700 22px/1.2 Arial, sans-serif; }
+    </style>
+  </defs>
+  <rect width="1200" height="760" fill="oklch(1 0 0)"/>
+  <rect x="0" y="0" width="18" height="760" fill="oklch(.48 .15 134)"/>
+
+  <text x="72" y="82" class="label" fill="oklch(.48 .15 134)">EPS PROJECT PLATFORM · DESIGN FOUNDATION 01</text>
+  <text x="72" y="137" class="title" fill="oklch(.20 .025 138)">Field daylight. Control-room precision.</text>
+  <text x="72" y="177" class="subtitle" fill="oklch(.49 .025 138)">High-contrast operational UI for fast site action and dense engineering review.</text>
+
+  <g transform="translate(72 235)">
+    <rect width="332" height="194" rx="18" fill="oklch(.48 .15 134)"/>
+    <text x="28" y="42" class="label" fill="white">PRIMARY · EPS SIGNAL GREEN</text>
+    <text x="28" y="94" class="sample" fill="white">Approve progress</text>
+    <text x="28" y="160" class="value" fill="white">oklch(.48 .15 134)</text>
+  </g>
+
+  <g transform="translate(428 235)">
+    <rect width="332" height="194" rx="18" fill="oklch(.91 .13 82)"/>
+    <text x="28" y="42" class="label" fill="oklch(.20 .025 138)">ACCENT · SITE AMBER</text>
+    <text x="28" y="94" class="sample" fill="oklch(.20 .025 138)">Decision due today</text>
+    <text x="28" y="160" class="value" fill="oklch(.20 .025 138)">oklch(.91 .13 82)</text>
+  </g>
+
+  <g transform="translate(784 235)">
+    <rect width="344" height="194" rx="18" fill="oklch(.20 .025 138)"/>
+    <text x="28" y="42" class="label" fill="white">INK · ENGINEERING CHARCOAL</text>
+    <text x="28" y="94" class="sample" fill="white">TH-2407 · Utility Building</text>
+    <text x="28" y="160" class="value" fill="white">oklch(.20 .025 138)</text>
+  </g>
+
+  <g transform="translate(72 467)">
+    <rect width="250" height="112" rx="14" fill="oklch(.965 .006 130)" stroke="oklch(.88 .012 130)"/>
+    <text x="20" y="34" class="label" fill="oklch(.20 .025 138)">SURFACE</text>
+    <text x="20" y="77" class="value" fill="oklch(.49 .025 138)">oklch(.965 .006 130)</text>
+  </g>
+  <g transform="translate(342 467)">
+    <rect width="250" height="112" rx="14" fill="white" stroke="oklch(.86 .012 130)"/>
+    <text x="20" y="34" class="label" fill="oklch(.20 .025 138)">BACKGROUND</text>
+    <text x="20" y="77" class="value" fill="oklch(.49 .025 138)">oklch(1 0 0)</text>
+  </g>
+  <g transform="translate(612 467)">
+    <rect width="250" height="112" rx="14" fill="oklch(.49 .025 138)"/>
+    <text x="20" y="34" class="label" fill="white">MUTED INK</text>
+    <text x="20" y="77" class="value" fill="white">oklch(.49 .025 138)</text>
+  </g>
+  <g transform="translate(882 467)">
+    <rect width="246" height="112" rx="14" fill="oklch(.55 .20 28)"/>
+    <text x="20" y="34" class="label" fill="white">CRITICAL</text>
+    <text x="20" y="77" class="value" fill="white">oklch(.55 .20 28)</text>
+  </g>
+
+  <line x1="72" y1="625" x2="1128" y2="625" stroke="oklch(.88 .012 130)"/>
+  <text x="72" y="672" class="label" fill="oklch(.20 .025 138)">TYPE</text>
+  <text x="155" y="674" class="sample" fill="oklch(.20 .025 138)">Noto Sans Thai · tabular project numbers · sentence-case actions</text>
+  <text x="72" y="718" class="subtitle" fill="oklch(.49 .025 138)">Restrained palette: white architecture, green ownership, amber attention, red only for critical exceptions.</text>
+</svg>
