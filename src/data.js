@@ -1,7 +1,7 @@
 export const demoProjects = [
   ['QO-101','Eastern Link Viaduct','Construction Services','Rayong','Infrastructure','Active',68,64,420,380,1,0,1,12,6500000,210000000,38,25,3,4.1,'2026-08-02',false,false],
   ['QO-102','Saraburi Kiln Upgrade','Cement','Saraburi','Industrial upgrade','Active',57,91,630,596,0,1,0,4,2100000,160000000,17,12,1,4.5,'2026-08-03',false,false],
-  ['QO-103','Lamphun Plant Utilities','Engineering','Lamphun','Utilities','Active',42,75,320,240,0,0,0,7,3900000,105000000,26,16,6,3.8,'2026-07-22',false,false],
+  ['QO-103','Lamphun Plant Utilities','Engineering','Lamphun','Utilities','Active',42,75,320,240,0,0,0,7,3900000,105000000,26,16,6,3.8,'2026-08-01',false,false],
   ['QO-104','Chonburi Solar Canopy','Industrial Solutions','Chonburi','Renewable energy','Closing',93,96,180,173,0,0,0,0,420000,84000000,8,7,0,4.7,'2026-08-03',false,false],
   ['QO-105','Bang Pa-in Distribution Hub','Construction Services','Ayutthaya','Logistics','On Hold',31,69,90,62,0,0,0,11,1800000,98000000,34,17,12,null,'2026-07-19',false,false],
   ['QO-106','Mae Moh Material Handling','Cement','Lampang','Material handling','Active',76,87,510,444,0,1,0,3,2700000,185000000,22,18,2,4.0,'2026-08-01',false,false],
