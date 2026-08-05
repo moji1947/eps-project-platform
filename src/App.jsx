@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Routes, Route, Link, useNavigate, useParams } from 'react-router-dom'
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip as ChartTooltip, PieChart, Pie, Cell, LineChart, Line } from 'recharts'
 import * as XLSX from 'xlsx'
-import { AlertTriangle, ArrowDown, ArrowLeft, ArrowUp, Building2, Calculator, CheckCircle2, ChevronRight, CircleAlert, Download, FileSpreadsheet, FilterX, Globe2, HardHat, Info, RefreshCw, Search, Upload, X } from 'lucide-react'
+import { AlertTriangle, ArrowDown, ArrowLeft, ArrowUp, Building2, Calculator, CheckCircle2, ChevronRight, CircleAlert, CircleDollarSign, ClipboardList, Download, FileSpreadsheet, FilterX, Globe2, HardHat, Info, ListChecks, RefreshCw, Search, ShieldCheck, ThumbsUp, Upload, X } from 'lucide-react'
 import { demoProjects, requiredFields } from './data.js'
 import ProjectQualityDetail from './ProjectQualityDetail.jsx'
 
@@ -79,8 +79,16 @@ function Dashboard({ctx:c}){
   }
   return <div className="app">
     <header className="app-header">
-      <div className="title-lockup"><span className="logo-mark"><HardHat/></span><div><h1>Project Quality Overview</h1><p>Quality status across all projects</p></div></div>
-      <div className="header-actions"><span className="updated">Last updated <strong>{c.updated.toLocaleString()}</strong></span><button className="button secondary" onClick={c.refresh} disabled={c.loading}><RefreshCw className={c.loading?'spin':''}/>{c.loading?'Refreshing':'Refresh'}</button><button className="button primary" onClick={()=>c.setImportOpen(true)}><Upload/>Import Data</button><div className="export-wrap"><button className="button secondary" onClick={()=>c.setExportOpen(v=>!v)}><Download/>Export View</button>{c.exportOpen&&<div className="export-menu"><button onClick={()=>c.exportData('xlsx')}>Excel workbook</button><button onClick={()=>c.exportData('csv')}>CSV file</button></div>}</div></div>
+      <div className="title-lockup"><span className="logo-mark"><HardHat/></span><div><h1>Project Quality Overview</h1><p>Across All Projects</p></div></div>
+      <section className="header-filterbar" aria-label="Portfolio filters">
+        <Filter label="Date range" value={c.filters.date} onChange={v=>c.setFilter('date',v)} options={['Custom Range','This Month','Last Month','Last 3 Months','Year to Date']}/>
+        <Filter label="Business unit" value={c.filters.unit} onChange={v=>c.setFilter('unit',v)} options={['All',...c.units]}/>
+        <Filter label="Project status" value={c.filters.projectStatus} onChange={v=>c.setFilter('projectStatus',v)} options={['All','Planning','Active','On Hold','Closing','Completed']}/>
+        <Filter label="Quality status" value={c.filters.quality} onChange={v=>c.setFilter('quality',v)} options={['All',...statuses]}/>
+        <label className="header-search">Search<span><Search/><input value={c.filters.search} onChange={e=>c.setFilter('search',e.target.value)} placeholder="Project, ID or location"/></span></label>
+        <button className="header-clear" onClick={c.clearFilters}><FilterX/>Clear</button>
+      </section>
+      <div className="header-actions"><span className="updated">Last updated <strong>{c.updated.toLocaleString()}</strong></span><button className="header-icon-button" onClick={c.refresh} disabled={c.loading} aria-label="Refresh quality data" title="Refresh"><RefreshCw className={c.loading?'spin':''}/></button><button className="button header-action" onClick={()=>c.setImportOpen(true)}><Upload/>Import</button><div className="export-wrap"><button className="button header-action" onClick={()=>c.setExportOpen(v=>!v)}><Download/>Export</button>{c.exportOpen&&<div className="export-menu"><button onClick={()=>c.exportData('xlsx')}>Excel workbook</button><button onClick={()=>c.exportData('csv')}>CSV file</button></div>}</div></div>
     </header>
     <DashboardBody c={c}/>
     {c.importOpen&&<ImportModal onClose={()=>c.setImportOpen(false)} onImport={finishImport}/>}
@@ -93,14 +101,6 @@ function DashboardBody({c}){
   const actual=c.filtered.reduce((s,p)=>s+p.actualConstructionCostThb,0)
   const rework=c.filtered.reduce((s,p)=>s+p.reworkCostThb,0)
   return <main>
-    <section className="filterbar" aria-label="Portfolio filters">
-      <Filter label="Date range" value={c.filters.date} onChange={v=>c.setFilter('date',v)} options={['Custom Range','This Month','Last Month','Last 3 Months','Year to Date']}/>
-      <Filter label="Business unit" value={c.filters.unit} onChange={v=>c.setFilter('unit',v)} options={['All',...c.units]}/>
-      <Filter label="Project status" value={c.filters.projectStatus} onChange={v=>c.setFilter('projectStatus',v)} options={['All','Planning','Active','On Hold','Closing','Completed']}/>
-      <Filter label="Quality status" value={c.filters.quality} onChange={v=>c.setFilter('quality',v)} options={['All',...statuses]}/>
-      <label className="search-field">Search<span><Search/><input value={c.filters.search} onChange={e=>c.setFilter('search',e.target.value)} placeholder="Project, ID, location or team"/></span></label>
-      <button className="clear-button" onClick={c.clearFilters}><FilterX/>Clear filters</button>
-    </section>
     {c.chips.length>0&&<div className="chips">{c.chips.map(([key,label])=><button key={key} onClick={()=>key==='chart'?c.setChartFilter(null):c.setFilter(key,key==='openNcr'?false:'All')}>{label}<X/></button>)}</div>}
     <section className="kpi-grid" aria-label="Portfolio KPIs">
       <Kpi active={c.focus==='qhi'} title="Portfolio QHI" value={c.qhi?.toFixed(1)??'-'} status={c.qhi==null?'Insufficient Data':c.qhi>=90?'Green':c.qhi>=80?'Yellow':c.qhi>=60?'Orange':'Red'} detail={c.included.length+' included / '+(c.filtered.length-c.included.length)+' excluded'} change="+1.8 vs previous period" onClick={()=>c.applySort('qhi','asc','qhi')} gauge={c.qhi}/>
@@ -119,7 +119,9 @@ function DashboardBody({c}){
   </main>
 }
 function Filter({label,value,onChange,options}){return <label>{label}<select value={value} onChange={e=>onChange(e.target.value)}>{options.map(x=><option key={x}>{x}</option>)}</select></label>}
-function Kpi({title,value,detail,change,status,active,onClick,gauge,help,action}){return <button className={'kpi '+(active?'active':'')} onClick={onClick} aria-pressed={active}><div className="kpi-head"><span>{title}{help&&<Info title={help}/>}</span>{status&&<Badge status={status}/>}</div><strong className="kpi-value">{value}</strong>{gauge!=null&&<span className="gauge"><i style={{width:gauge+'%',background:COLORS[status]}}/></span>}<small>{detail}</small><span className="change">{change}</span>{action&&<span className="kpi-action">{action}</span>}</button>}
+function PortfolioGauge({value}){const score=Math.max(0,Math.min(100,value||0)),angle=Math.PI+Math.PI*score/100,x=75+51*Math.cos(angle),y=80+51*Math.sin(angle);return <span className="portfolio-gauge"><svg viewBox="0 0 150 88" aria-hidden="true"><path d="M20,80 A55,55 0 0,1 92,27.7" stroke={COLORS.Red}/><path d="M92,27.7 A55,55 0 0,1 119.5,47.7" stroke={COLORS.Orange}/><path d="M119.5,47.7 A55,55 0 0,1 127.3,63" stroke={COLORS.Yellow}/><path d="M127.3,63 A55,55 0 0,1 130,80" stroke={COLORS.Green}/><line x1="75" y1="80" x2={x} y2={y}/><circle cx="75" cy="80" r="5"/></svg><span><strong>{value?.toFixed(1)??'-'}</strong><small>/100</small></span></span>}
+function KpiIcon({title}){const Icon=title==='Total Projects'?Building2:title==='Inspection Pass Rate'?ShieldCheck:title==='Open NCR'?ClipboardList:title==='Rework Cost'?CircleDollarSign:title==='Punch List Remaining'?ListChecks:ThumbsUp;return <span className="kpi-icon"><Icon/></span>}
+function Kpi({title,value,detail,change,status,active,onClick,gauge,help,action}){if(gauge!=null)return <button className={'kpi kpi--hero '+(active?'active':'')} onClick={onClick} aria-pressed={active}><div className="kpi-head"><span>{title}</span></div><PortfolioGauge value={gauge}/>{status&&<Badge status={status}/>}<small>{detail}</small><span className="change">{change}</span></button>;return <button className={'kpi '+(active?'active':'')} onClick={onClick} aria-pressed={active}><KpiIcon title={title}/><div className="kpi-head"><span>{title}{help&&<Info title={help}/>}</span></div><strong className="kpi-value">{value}</strong><small>{detail}</small><span className="change">{change}</span>{action&&<span className="kpi-action">{action}</span>}</button>}
 
 function Analysis({unitData,statusData,filtered,attention,chartFilter,chartSelect,navigate,setFilter}){
   return <section className="analysis-grid">
