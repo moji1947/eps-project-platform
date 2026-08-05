@@ -1,18 +1,36 @@
-# EPS Project Progress, Quality and Change Control Platform
+# EPS Project Quality Overview
 
-This repository is the authoritative production codebase for the EPS web-based Construction Progress, Quality, Document, and Change Control Platform.
+Interactive construction QA/QC portfolio prototype for comparing quality performance across projects.
 
-## Repository authority
+## Live application
 
-- Production application architecture and implementation belong in this repository.
-- `eps-project-controls-pro` is a visual and UX reference only, particularly for portfolio, project map, and project workspace concepts.
-- `eps-construction-dashboard` is a previous concept only.
-- Neither reference repository is a production architecture dependency.
-- Reference repositories must not be copied wholesale, modified as part of this project, or treated as upstream production code.
+https://moji1947.github.io/eps-project-platform/
 
-## Current stage
+## Included
 
-Architecture planning and source assessment are complete. Application implementation has not started in this repository.
+- Rule-based QHI calculations with critical overrides
+- Seven interactive portfolio KPIs
+- Business-unit and quality-status chart filtering
+- Search, combined filters, removable chips, sorting and pagination
+- Ranked projects requiring attention
+- Refresh-safe project detail routes
+- Excel, XLS and CSV import with sheet selection, column mapping, validation and preview
+- Filtered Excel and CSV export
+- Browser persistence, restore demo data and clear-data confirmation
+- Twelve fictional construction projects across green, yellow, red and insufficient-data states
 
-Implementation requires a separately approved technical foundation and delivery plan.
+Prototype records are stored in localStorage. No project data is sent to a server.
 
+## Run locally
+
+```powershell
+npm install
+npm run dev
+```
+
+Production build:
+
+```powershell
+npm run build
+npm run preview
+```

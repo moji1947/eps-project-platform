@@ -1,267 +1,160 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import {
-  AlertTriangle, ArrowLeft, ArrowRight, BarChart3, Bell, Building2, Camera,
-  Check, CheckCircle2, ChevronDown, ClipboardCheck, Clock3, CloudUpload,
-  FileCheck2, FileText, FolderOpen, Gauge, Grid2X2, HardHat, ImagePlus,
-  Languages, LayoutDashboard, MapPin, Menu, MessageSquareWarning, Minus,
-  PackageCheck, PenLine, Plus, RotateCcw, Search, ShieldCheck, Upload,
-  UserRound, Wifi, X,
-} from 'lucide-react'
-import { activities, attention, initialIssues, projects, revisions } from './data.js'
+import { Routes, Route, Link, useNavigate, useParams } from 'react-router-dom'
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip as ChartTooltip, PieChart, Pie, Cell, LineChart, Line } from 'recharts'
+import * as XLSX from 'xlsx'
+import { AlertTriangle, ArrowDown, ArrowLeft, ArrowUp, Building2, CheckCircle2, ChevronRight, CircleAlert, Download, FileSpreadsheet, FilterX, HardHat, Info, RefreshCw, Search, Upload, X } from 'lucide-react'
+import { demoProjects, requiredFields } from './data.js'
 
-const photoSeeds = [
-  'https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=900&q=72',
-  'https://images.unsplash.com/photo-1541888946425-d81bb19240f5?auto=format&fit=crop&w=900&q=72',
-  'https://images.unsplash.com/photo-1531834685032-c34bf0d84c77?auto=format&fit=crop&w=900&q=72',
-]
+const STORE='eps-quality-portfolio-v1'
+const COLORS={'On Track':'#168A4B','Needs Attention':'#D99A00','Action Required':'#D83A3A','Insufficient Data':'#778397'}
+const statuses=Object.keys(COLORS)
+const toNum=v=>v===''||v==null?null:Number(v)
+const pct=(a,b)=>b>0?a/b*100:null
+const money=n=>new Intl.NumberFormat('en-US',{style:'currency',currency:'THB',maximumFractionDigits:0}).format(n||0)
+const average=a=>a.length?a.reduce((s,v)=>s+v,0)/a.length:null
+const camel=s=>s.replace(/_([a-z])/g,(_,c)=>c.toUpperCase())
 
-const navItems = [
-  ['overview', 'Overview', LayoutDashboard],
-  ['my-work', 'My Work', UserRound],
-  ['progress', 'Progress', BarChart3],
-  ['site-updates', 'Site Updates', Camera],
-  ['quality', 'QA/QC', ShieldCheck],
-  ['drawings', 'Drawings & Revisions', FileCheck2],
-  ['documents', 'Documents', FolderOpen],
-  ['reports', 'Reports', Gauge],
-]
-
-function classNames(...items) { return items.filter(Boolean).join(' ') }
-
-function Status({ children, tone = 'neutral' }) {
-  return <span className={`status status--${tone}`}><span className="status__dot" />{children}</span>
+function quality(p){
+  const missing=[]
+  if(!p.completedInspectionPoints)missing.push('inspection results')
+  if(!p.actualConstructionCostThb)missing.push('actual construction cost')
+  if(!p.requiredTestsCompleted)missing.push('mandatory test results')
+  if(missing.length)return{qhi:null,status:'Insufficient Data',reason:`Missing ${missing.join(', ')}`,missing}
+  const inspection=pct(p.passedInspectionPoints,p.completedInspectionPoints)
+  const ncrPenalty=p.openNcrCritical*25+p.openNcrMajor*7+p.openNcrMinor*2+Math.min(p.overdueNcr,10)
+  const rework=pct(p.reworkCostThb,p.actualConstructionCostThb)
+  const materials=pct(p.requiredTestsPassed,p.requiredTestsCompleted)
+  const punch=pct(p.punchListClosed,p.punchListTotal)??100
+  const satisfaction=p.clientSatisfactionRecorded?p.clientSatisfactionScore*20:75
+  let qhi=inspection*.35+Math.max(0,100-ncrPenalty)*.25+Math.max(0,100-rework*20)*.15+materials*.1+punch*.1+satisfaction*.05
+  qhi=Math.round(Math.max(0,Math.min(100,qhi))*10)/10
+  const overrides=[]
+  if(p.openNcrCritical)overrides.push(`${p.openNcrCritical} critical NCR open`)
+  if(p.unresolvedCriticalTest)overrides.push('Mandatory material test unresolved')
+  if(p.formalStopWorkQuality)overrides.push('Quality-related stop-work active')
+  if(p.holdPointBypassed)overrides.push('Mandatory hold point bypassed')
+  if((Date.now()-new Date(p.lastUpdated))/86400000>14)overrides.push('Quality data exceeds critical stale limit')
+  const status=overrides.length?'Action Required':qhi>=85?'On Track':qhi>=70?'Needs Attention':'Action Required'
+  const reason=overrides[0]||(status==='Action Required'?(inspection<75?'Inspection pass rate below target':rework>2?'Rework cost above 2%':'QHI below threshold'):status==='Needs Attention'?'Quality indicators need attention':'Quality indicators within target')
+  return{qhi,status,reason,override:overrides.join('; ')}
 }
 
-function Toast({ message }) {
-  return message ? <div className="toast" role="status"><CheckCircle2 size={18} />{message}</div> : null
+function enrich(p){const q=quality(p);return{...p,...q,inspectionPassRate:pct(p.passedInspectionPoints,p.completedInspectionPoints),reworkPercent:pct(p.reworkCostThb,p.actualConstructionCostThb),openNcr:p.openNcrMinor+p.openNcrMajor+p.openNcrCritical,punchRemaining:Math.max(0,p.punchListTotal-p.punchListClosed)}}
+function Badge({status,title}){const icon=status==='On Track'?'OK':status==='Needs Attention'?'!':status==='Action Required'?'X':'?';return <span className={`badge badge--${status.replaceAll(' ','-').toLowerCase()}`} title={title}><span aria-hidden={true}>{icon}</span>{status}</span>}
+function Toast({message}){return message&&<div className="toast" role="status"><CheckCircle2 size={18}/>{message}</div>}
+
+export default function App(){return <Routes><Route path="*" element={<Overview/>}/><Route path="/projects/:projectId/quality" element={<ProjectDetail/>}/></Routes>}
+
+function Overview(){
+  const navigate=useNavigate()
+  const [projects,setProjects]=useState(()=>{try{return JSON.parse(localStorage.getItem(STORE))||demoProjects}catch{return demoProjects}})
+  const [filters,setFilters]=useState({date:'Year to Date',unit:'All',projectStatus:'All',quality:'All',search:'',openNcr:false})
+  const [chartFilter,setChartFilter]=useState(null),[sort,setSort]=useState({key:'qhi',dir:'asc'}),[focus,setFocus]=useState('qhi')
+  const [page,setPage]=useState(1),[pageSize,setPageSize]=useState(10),[loading,setLoading]=useState(false),[toast,setToast]=useState(''),[importOpen,setImportOpen]=useState(false),[exportOpen,setExportOpen]=useState(false),[updated,setUpdated]=useState(new Date())
+  useEffect(()=>localStorage.setItem(STORE,JSON.stringify(projects)),[projects])
+  useEffect(()=>{if(!toast)return;const t=setTimeout(()=>setToast(''),2800);return()=>clearTimeout(t)},[toast])
+  const all=useMemo(()=>projects.map(enrich),[projects])
+  const filtered=useMemo(()=>all.filter(p=>{const q=filters.search.toLowerCase();const search=!q||[p.name,p.id,p.location,p.businessUnit,p.responsibleTeam].some(v=>String(v).toLowerCase().includes(q));const chartOk=!chartFilter||(!chartFilter.unit||p.businessUnit===chartFilter.unit)&&(!chartFilter.status||p.status===chartFilter.status);const d=new Date(p.lastUpdated),now=new Date(),monthStart=new Date(now.getFullYear(),now.getMonth(),1),lastMonthStart=new Date(now.getFullYear(),now.getMonth()-1,1),threeMonthsAgo=new Date(now.getFullYear(),now.getMonth()-2,1),yearStart=new Date(now.getFullYear(),0,1);const dateOk=filters.date==='This Month'?d>=monthStart:filters.date==='Last Month'?d>=lastMonthStart&&d<monthStart:filters.date==='Last 3 Months'?d>=threeMonthsAgo:filters.date==='Year to Date'?d>=yearStart:true;return dateOk&&search&&(filters.unit==='All'||p.businessUnit===filters.unit)&&(filters.projectStatus==='All'||p.projectStatus===filters.projectStatus)&&(filters.quality==='All'||p.status===filters.quality)&&(!filters.openNcr||p.openNcr>0)&&chartOk}),[all,filters,chartFilter])
+  const sorted=useMemo(()=>[...filtered].sort((a,b)=>{let av=a[sort.key],bv=b[sort.key];if(av==null)av=Infinity;if(bv==null)bv=Infinity;return(typeof av==='string'?av.localeCompare(bv):av-bv)*(sort.dir==='asc'?1:-1)}),[filtered,sort])
+  const visible=sorted.slice((page-1)*pageSize,page*pageSize),included=filtered.filter(p=>p.qhi!=null),qhi=average(included.map(p=>p.qhi))
+  const units=useMemo(()=>[...new Set(all.map(p=>p.businessUnit))],[all])
+  const unitData=units.map(unit=>{const rows=filtered.filter(p=>p.businessUnit===unit);return{unit,total:rows.length,...Object.fromEntries(statuses.map(s=>[s,rows.filter(p=>p.status===s).length]))}}).filter(x=>x.total)
+  const statusData=statuses.map(name=>({name,value:filtered.filter(p=>p.status===name).length})).filter(x=>x.value)
+  const attention=[...filtered].filter(p=>p.status!=='On Track').sort((a,b)=>(b.openNcrCritical-a.openNcrCritical)||(Number(b.unresolvedCriticalTest)-Number(a.unresolvedCriticalTest))||(a.qhi??999)-(b.qhi??999)).slice(0,6)
+  const setFilter=(key,value)=>{setFilters(f=>({...f,[key]:value}));setPage(1)},clearFilters=()=>{setFilters({date:'Year to Date',unit:'All',projectStatus:'All',quality:'All',search:'',openNcr:false});setChartFilter(null);setPage(1)}
+  const applySort=(key,dir,id=key)=>{setSort({key,dir});setFocus(id);setPage(1)},headerSort=key=>setSort(s=>({key,dir:s.key===key&&s.dir==='asc'?'desc':'asc'})),chartSelect=next=>setChartFilter(c=>JSON.stringify(c)===JSON.stringify(next)?null:next)
+  const chips=[filters.unit!=='All'&&['unit',filters.unit],filters.projectStatus!=='All'&&['projectStatus',filters.projectStatus],filters.quality!=='All'&&['quality',filters.quality],filters.search&&['search',`Search: ${filters.search}`],filters.openNcr&&['openNcr','Open NCR only'],chartFilter&&['chart','Chart selection']].filter(Boolean)
+  const exportData=type=>{const rows=sorted.map(p=>({Project_ID:p.id,Project:p.name,Business_Unit:p.businessUnit,Location:p.location,Project_Status:p.projectStatus,Progress:p.scurveProgressPercent,QHI:p.qhi,Quality_Status:p.status,Inspection_Pass_Rate:p.inspectionPassRate,Open_NCR:p.openNcr,Rework_Percent:p.reworkPercent,Punch_Remaining:p.punchRemaining,Client_Satisfaction:p.clientSatisfactionScore,Last_Updated:p.lastUpdated})),wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([['Export timestamp',new Date().toISOString()],['Applied filters',chips.map(c=>c[1]).join('; ')||'None'],['Sort order',`${sort.key} ${sort.dir}`],['Portfolio QHI',qhi?.toFixed(1)??'Insufficient Data']]),'Summary');XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(rows),'Projects');if(type==='csv')XLSX.writeFile({SheetNames:['Projects'],Sheets:{Projects:XLSX.utils.json_to_sheet(rows)}},'quality-portfolio-view.csv',{bookType:'csv'});else XLSX.writeFile(wb,'quality-portfolio-view.xlsx');setExportOpen(false);setToast(`${type.toUpperCase()} export created`)}
+  const refresh=()=>{setLoading(true);setTimeout(()=>{setUpdated(new Date());setLoading(false);setToast('Quality data updated')},700)}
+  const ctx={navigate,projects,setProjects,filters,setFilter,chartFilter,setChartFilter,sort,setSort,focus,setFocus,page,setPage,pageSize,setPageSize,loading,setLoading,toast,setToast,importOpen,setImportOpen,exportOpen,setExportOpen,updated,all,filtered,sorted,visible,included,qhi,units,unitData,statusData,attention,clearFilters,applySort,headerSort,chartSelect,chips,exportData,refresh}
+  return <Dashboard ctx={ctx}/>
 }
 
-function App() {
-  const [active, setActive] = useState('overview')
-  const [projectId, setProjectId] = useState(projects[0].id)
-  const [projectOpen, setProjectOpen] = useState(false)
-  const [issueOpen, setIssueOpen] = useState(false)
-  const [progressOpen, setProgressOpen] = useState(false)
-  const [drawingOpen, setDrawingOpen] = useState(false)
-  const [menuOpen, setMenuOpen] = useState(false)
-  const [toast, setToast] = useState('')
-  const [issues, setIssues] = useState(() => {
-    const saved = localStorage.getItem('eps-preview-issues')
-    return saved ? JSON.parse(saved) : initialIssues
-  })
-  const project = projects.find((item) => item.id === projectId) || projects[0]
-
-  useEffect(() => localStorage.setItem('eps-preview-issues', JSON.stringify(issues)), [issues])
-  useEffect(() => {
-    if (!toast) return undefined
-    const timer = setTimeout(() => setToast(''), 3200)
-    return () => clearTimeout(timer)
-  }, [toast])
-
-  const navigate = (id) => { setActive(id); setMenuOpen(false) }
-  const openAction = (action) => {
-    if (action === 'issue') setIssueOpen(true)
-    if (action === 'progress') setProgressOpen(true)
-    if (action === 'drawing') setDrawingOpen(true)
+function Dashboard({ctx:c}){
+  const finishImport=rows=>{
+    c.setProjects(current=>[...current.filter(p=>!rows.some(r=>r.id===p.id)),...rows])
+    c.setImportOpen(false)
+    c.setToast(rows.length+' valid project records imported')
   }
-
-  return (
-    <div className="app-shell">
-      <aside className={classNames('sidebar', menuOpen && 'sidebar--open')}>
-        <div className="brand"><img src={`${import.meta.env.BASE_URL}eps-logo.jpg`} alt="EPS Engineering Project Solutions" /></div>
-        <nav aria-label="Primary navigation">
-          {navItems.map(([id, label, Icon]) => (
-            <button key={id} className={classNames('nav-item', active === id && 'nav-item--active')} onClick={() => navigate(id)}>
-              <Icon size={20} /><span>{label}</span>
-            </button>
-          ))}
-        </nav>
-        <div className="sidebar-projects">
-          <p>Projects</p>
-          {projects.slice(0, 4).map((item) => (
-            <button key={item.id} className={classNames('project-mini', item.id === projectId && 'project-mini--active')} onClick={() => { setProjectId(item.id); setActive('overview') }}>
-              <span className={`project-dot project-dot--${item.status}`} />{item.short}
-            </button>
-          ))}
-        </div>
-        <div className="profile"><span className="avatar">AK</span><span><strong>Arun K.</strong><small>Project Manager</small></span><ChevronDown size={16} /></div>
-      </aside>
-
-      <div className="app-main">
-        <header className="topbar">
-          <button className="icon-button mobile-menu" aria-label="Open navigation" onClick={() => setMenuOpen(!menuOpen)}><Menu /></button>
-          <div className="project-picker-wrap">
-            <button className="project-picker" onClick={() => setProjectOpen(!projectOpen)}><strong>{project.name}</strong><ChevronDown size={17} /></button>
-            {projectOpen && <div className="project-menu">
-              {projects.map((item) => <button key={item.id} onClick={() => { setProjectId(item.id); setProjectOpen(false) }}><span className={`project-dot project-dot--${item.status}`} />{item.name}{item.id === projectId && <Check size={16} />}</button>)}
-            </div>}
-          </div>
-          <span className="source-chip">{project.template} <i /> 30 Sep 2025</span>
-          <div className="topbar-spacer" />
-          <span className="sync-state"><Wifi size={15} /> Synced</span>
-          <button className="icon-button" aria-label="Notifications"><Bell size={19} /><b>8</b></button>
-          <button className="language"><Languages size={17} /><span>ไทย</span><i />EN</button>
-          <span className="preview-badge">Preview · Demo Data</span>
-        </header>
-
-        <main className="page">
-          {active === 'overview' && <Overview project={project} issues={issues} onAction={openAction} setActive={setActive} setToast={setToast} />}
-          {active === 'progress' && <ProgressPage onUpdate={() => setProgressOpen(true)} setToast={setToast} />}
-          {active === 'site-updates' && <SiteUpdatesPage onIssue={() => setIssueOpen(true)} setToast={setToast} />}
-          {active === 'quality' && <QualityPage issues={issues} onIssue={() => setIssueOpen(true)} setToast={setToast} />}
-          {active === 'drawings' && <DrawingsPage onUpload={() => setDrawingOpen(true)} setToast={setToast} />}
-          {active === 'my-work' && <MyWorkPage onAction={openAction} />}
-          {active === 'documents' && <DocumentsPage onUpload={() => setDrawingOpen(true)} />}
-          {active === 'reports' && <PortfolioPage onOpen={(id) => { setProjectId(id); setActive('overview') }} />}
-        </main>
-
-        <nav className="mobile-nav" aria-label="Mobile navigation">
-          {navItems.slice(0, 5).map(([id, label, Icon]) => <button key={id} className={active === id ? 'is-active' : ''} onClick={() => navigate(id)}><Icon size={20} /><span>{label.replace('Site ', '')}</span></button>)}
-        </nav>
-      </div>
-
-      {menuOpen && <button className="scrim" aria-label="Close navigation" onClick={() => setMenuOpen(false)} />}
-      {issueOpen && <IssueDrawer onClose={() => setIssueOpen(false)} onSubmit={(issue) => { setIssues((list) => [issue, ...list]); setIssueOpen(false); setToast(`${issue.id} submitted to QA/QC`) }} />}
-      {progressOpen && <ProgressDialog onClose={() => setProgressOpen(false)} onSubmit={() => { setProgressOpen(false); setToast('Progress update submitted for review') }} />}
-      {drawingOpen && <DrawingDialog onClose={() => setDrawingOpen(false)} onSubmit={(kind) => { setDrawingOpen(false); setToast(`${kind} drawing uploaded to staging`) }} />}
-      <Toast message={toast} />
-    </div>
-  )
+  return <div className="app">
+    <header className="app-header">
+      <div className="title-lockup"><span className="logo-mark"><HardHat/></span><div><h1>Project Quality Overview</h1><p>Quality status across all projects</p></div></div>
+      <div className="header-actions"><span className="updated">Last updated <strong>{c.updated.toLocaleString()}</strong></span><button className="button secondary" onClick={c.refresh} disabled={c.loading}><RefreshCw className={c.loading?'spin':''}/>{c.loading?'Refreshing':'Refresh'}</button><button className="button primary" onClick={()=>c.setImportOpen(true)}><Upload/>Import Data</button><div className="export-wrap"><button className="button secondary" onClick={()=>c.setExportOpen(v=>!v)}><Download/>Export View</button>{c.exportOpen&&<div className="export-menu"><button onClick={()=>c.exportData('xlsx')}>Excel workbook</button><button onClick={()=>c.exportData('csv')}>CSV file</button></div>}</div></div>
+    </header>
+    <DashboardBody c={c}/>
+    {c.importOpen&&<ImportModal onClose={()=>c.setImportOpen(false)} onImport={finishImport}/>}<Toast message={c.toast}/>
+  </div>
 }
-
-function Overview({ project, issues, onAction, setActive, setToast }) {
-  return <>
-    <section className="welcome-row">
-      <div><p className="eyebrow">{project.id} · {project.location}</p><h1>Project workspace</h1><p>Review progress, site evidence and drawing changes in one place.</p></div>
-      <div className="curve-mini"><SCurve compact /><div><span>Overall progress</span><strong>{project.progress}%</strong><small>Approved actual</small></div></div>
+function DashboardBody({c}){
+  const completed=c.filtered.reduce((s,p)=>s+(p.completedInspectionPoints||0),0)
+  const passed=c.filtered.reduce((s,p)=>s+(p.passedInspectionPoints||0),0)
+  const actual=c.filtered.reduce((s,p)=>s+p.actualConstructionCostThb,0)
+  const rework=c.filtered.reduce((s,p)=>s+p.reworkCostThb,0)
+  return <main>
+    <section className="filterbar" aria-label="Portfolio filters">
+      <Filter label="Date range" value={c.filters.date} onChange={v=>c.setFilter('date',v)} options={['Custom Range','This Month','Last Month','Last 3 Months','Year to Date']}/>
+      <Filter label="Business unit" value={c.filters.unit} onChange={v=>c.setFilter('unit',v)} options={['All',...c.units]}/>
+      <Filter label="Project status" value={c.filters.projectStatus} onChange={v=>c.setFilter('projectStatus',v)} options={['All','Planning','Active','On Hold','Closing','Completed']}/>
+      <Filter label="Quality status" value={c.filters.quality} onChange={v=>c.setFilter('quality',v)} options={['All',...statuses]}/>
+      <label className="search-field">Search<span><Search/><input value={c.filters.search} onChange={e=>c.setFilter('search',e.target.value)} placeholder="Project, ID, location or team"/></span></label>
+      <button className="clear-button" onClick={c.clearFilters}><FilterX/>Clear filters</button>
     </section>
-    <section className="quick-actions">
-      <QuickAction icon={Upload} title="Update progress" text="Record activity progress with evidence" tone="green" onClick={() => onAction('progress')} />
-      <QuickAction icon={Camera} title="Report site issue" text="Raise an issue or non-conformance" tone="indigo" onClick={() => onAction('issue')} />
-      <QuickAction icon={FileCheck2} title="Upload drawing" text="Upload GA or As-built drawings" tone="violet" onClick={() => onAction('drawing')} />
+    {c.chips.length>0&&<div className="chips">{c.chips.map(([key,label])=><button key={key} onClick={()=>key==='chart'?c.setChartFilter(null):c.setFilter(key,key==='openNcr'?false:'All')}>{label}<X/></button>)}</div>}
+    <section className="kpi-grid" aria-label="Portfolio KPIs">
+      <Kpi active={c.focus==='qhi'} title="Portfolio QHI" value={c.qhi?.toFixed(1)??'-'} status={c.qhi==null?'Insufficient Data':c.qhi>=85?'On Track':c.qhi>=70?'Needs Attention':'Action Required'} detail={c.included.length+' included / '+(c.filtered.length-c.included.length)+' excluded'} change="+1.8 vs previous period" onClick={()=>c.applySort('qhi','asc','qhi')} gauge={c.qhi}/>
+      <Kpi active={c.focus==='total'} title="Total Projects" value={c.filtered.length} detail={c.filtered.filter(p=>p.projectStatus==='Active').length+' active / '+c.filtered.filter(p=>p.projectStatus==='Completed').length+' completed'} change={c.filtered.filter(p=>p.qhi==null).length+' insufficient data'} onClick={()=>c.applySort('name','asc','total')}/>
+      <Kpi active={c.focus==='pass'} title="Inspection Pass Rate" value={(pct(passed,completed)?.toFixed(1)??'-')+'%'} detail={passed.toLocaleString()+' passed / '+completed.toLocaleString()+' completed'} change="+0.9% vs previous" help="Inspection points passed during the selected reporting period." onClick={()=>c.applySort('inspectionPassRate','asc','pass')}/>
+      <Kpi active={c.focus==='ncr'} title="Open NCR" value={c.filtered.reduce((s,p)=>s+p.openNcr,0)} detail={c.filtered.reduce((s,p)=>s+p.overdueNcr,0)+' overdue / '+c.filtered.reduce((s,p)=>s+p.openNcrCritical,0)+' critical'} change="-3 vs previous" onClick={()=>c.applySort('openNcr','desc','ncr')} action={<button onClick={e=>{e.stopPropagation();c.setFilter('openNcr',!c.filters.openNcr)}}>{c.filters.openNcr?'Show all':'Open NCR only'}</button>}/>
+      <Kpi active={c.focus==='rework'} title="Rework Cost" value={money(rework)} detail={(pct(rework,actual)?.toFixed(2)??'-')+'% of actual cost'} change="+0.12% vs previous" onClick={()=>c.applySort('reworkPercent','desc','rework')}/>
+      <Kpi active={c.focus==='punch'} title="Punch List Remaining" value={c.filtered.reduce((s,p)=>s+p.punchRemaining,0)} detail={c.filtered.reduce((s,p)=>s+p.punchListOverdue,0)+' overdue items'} change="-18 vs previous" onClick={()=>c.applySort('punchRemaining','desc','punch')}/>
+      <Kpi active={c.focus==='sat'} title="Client Satisfaction" value={average(c.filtered.filter(p=>p.clientSatisfactionRecorded).map(p=>p.clientSatisfactionScore))?.toFixed(1)??'-'} detail={c.filtered.filter(p=>p.clientSatisfactionRecorded).length+' evaluated / '+c.filtered.filter(p=>!p.clientSatisfactionRecorded).length+' not evaluated'} change="+0.2 vs previous" onClick={()=>c.applySort('clientSatisfactionScore','asc','sat')}/>
     </section>
-    <div className="overview-grid">
-      <div className="overview-left">
-        <SiteFeed onAdd={() => onAction('issue')} setToast={setToast} />
-        <RevisionControl onUpload={() => onAction('drawing')} setToast={setToast} />
-      </div>
-      <div className="overview-right">
-        <AttentionPanel />
-        <PMReview setToast={setToast} />
-      </div>
-    </div>
-    <section className="panel quality-snapshot">
-      <div className="panel-head"><div><h2>QA/QC control</h2><p>Issues, revision compliance and closure readiness.</p></div><button className="text-button" onClick={() => setActive('quality')}>Open control center <ArrowRight size={16} /></button></div>
-      <IssueTable issues={issues.slice(0, 3)} />
-    </section>
-  </>
+    <div className="focus-row">{c.focus&&<><span>{c.focus==='qhi'?'Projects sorted by lowest QHI':'KPI focus: '+c.focus}</span><button onClick={()=>{c.setFocus(null);c.setSort({key:'name',dir:'asc'})}}>Clear KPI Focus</button></>}</div>
+    <Analysis unitData={c.unitData} statusData={c.statusData} filtered={c.filtered} attention={c.attention} chartFilter={c.chartFilter} chartSelect={c.chartSelect} navigate={c.navigate}/>
+    <ProjectTable {...c}/>
+    <div className="data-controls"><button onClick={()=>{if(confirm('Restore the original 12-project demo dataset?')){c.setProjects(demoProjects);c.setToast('Demo data restored')}}}>Restore Demo Data</button><button className="danger-text" onClick={()=>{if(confirm('Clear all project data from this browser?')){c.setProjects([]);c.setToast('Browser project data cleared')}}}>Clear Imported Data</button></div>
+  </main>
 }
+function Filter({label,value,onChange,options}){return <label>{label}<select value={value} onChange={e=>onChange(e.target.value)}>{options.map(x=><option key={x}>{x}</option>)}</select></label>}
+function Kpi({title,value,detail,change,status,active,onClick,gauge,help,action}){return <button className={'kpi '+(active?'active':'')} onClick={onClick} aria-pressed={active}><div className="kpi-head"><span>{title}{help&&<Info title={help}/>}</span>{status&&<Badge status={status}/>}</div><strong className="kpi-value">{value}</strong>{gauge!=null&&<span className="gauge"><i style={{width:gauge+'%',background:COLORS[status]}}/></span>}<small>{detail}</small><span className="change">{change}</span>{action&&<span className="kpi-action">{action}</span>}</button>}
 
-function QuickAction({ icon: Icon, title, text, tone, onClick }) {
-  return <button className="quick-action" onClick={onClick}><span className={`quick-icon quick-icon--${tone}`}><Icon size={26} /></span><span><strong>{title}</strong><small>{text}</small></span><ArrowRight size={18} /></button>
-}
-
-function SCurve({ compact = false }) {
-  return <svg className={compact ? 's-curve s-curve--compact' : 's-curve'} viewBox="0 0 620 220" role="img" aria-label="Plan and approved actual S-Curve">
-    {!compact && [40,80,120,160,200].map((y) => <line key={y} x1="28" y1={y} x2="606" y2={y} className="chart-grid" />)}
-    <path d="M28 201 C90 199 112 193 155 177 S223 145 276 127 S347 101 400 83 S480 42 606 25" className="chart-plan" />
-    <path d="M28 202 C92 201 122 197 161 184 S232 157 280 139 S349 112 404 96 S470 72 511 61" className="chart-actual" />
-    <path d="M511 61 C548 56 578 62 606 58" className="chart-pending" />
-  </svg>
-}
-
-function SiteFeed({ onAdd, setToast }) {
-  const fileRef = useRef(null)
-  const [uploads, setUploads] = useState([])
-  const handleFiles = (files) => {
-    const next = Array.from(files).slice(0, 4).map((file) => ({ name: file.name, url: URL.createObjectURL(file) }))
-    setUploads((current) => [...next, ...current])
-    setToast(`${next.length} site photo${next.length === 1 ? '' : 's'} added to draft`)
-  }
-  const cards = [
-    { id: 'A-04120', title: 'Procurement & M/C Delivery', user: 'P. Chai', time: '30 Sep 2025 · 10:15', change: '+12%', note: 'Mill body arrived and offloaded safely.', status: 'Approved' },
-    { id: 'A-04210', title: 'Structure Installation', user: 'S. Chai', time: '29 Sep 2025 · 16:40', change: '+8%', note: 'Column C12–C15 installation in progress.', status: 'Pending review' },
-    { id: 'A-04220', title: 'Equipment Installation', user: 'M. Chai', time: '29 Sep 2025 · 09:30', change: '+5%', note: 'Pump P-201 setting alignment.', status: 'Pending info' },
-  ]
-  return <section className="panel site-feed">
-    <div className="panel-head"><div><h2>Site updates</h2><p>Photo evidence connected to activities and approvals.</p></div><button className="text-button">View all updates <ArrowRight size={16} /></button></div>
-    <div className="site-card-grid">
-      <button className="add-photo-card" onClick={() => fileRef.current?.click()}><span><Camera size={28} /></span><strong>Add photos from site</strong><small>Take a photo or upload multiple images</small><em>Take photo / Upload</em></button>
-      <input ref={fileRef} className="visually-hidden" type="file" accept="image/*" capture="environment" multiple onChange={(e) => handleFiles(e.target.files)} />
-      {uploads.slice(0, 1).map((item) => <article className="site-card" key={item.url}><img src={item.url} alt={item.name} /><Status tone="info">Draft</Status><div><strong>New site evidence</strong><p>{item.name}</p><small>Ready to link to an activity</small></div></article>)}
-      {cards.slice(0, uploads.length ? 2 : 3).map((card, index) => <article className="site-card" key={card.id}><img src={photoSeeds[index]} alt="Construction work progress" loading="lazy" /><Status tone={card.status === 'Approved' ? 'success' : 'warning'}>{card.status}</Status><div><strong>{card.id} · {card.title}</strong><p>{card.user} · {card.time} <b>{card.change}</b></p><small>{card.note}</small></div></article>)}
-    </div>
+function Analysis({unitData,statusData,filtered,attention,chartFilter,chartSelect,navigate}){
+  return <section className="analysis-grid">
+    <article className="panel"><PanelHead title="Projects by Business Unit" subtitle="Quality status mix across the filtered portfolio"/><div className="chart-box"><ResponsiveContainer width="100%" height={260}><BarChart data={unitData} layout="vertical" margin={{left:18,right:24}}><XAxis type="number" allowDecimals={false}/><YAxis type="category" dataKey="unit" width={126} tick={{fontSize:12}}/><ChartTooltip/>{statuses.map(s=><Bar key={s} dataKey={s} stackId="a" fill={COLORS[s]} onClick={d=>chartSelect({unit:d.unit,status:s})} cursor="pointer"/>)}</BarChart></ResponsiveContainer></div><Legend onSelect={s=>chartSelect({status:s})} selected={chartFilter?.status}/></article>
+    <article className="panel"><PanelHead title="Quality Status Distribution" subtitle="Counts match the current project table"/><div className="donut-wrap"><ResponsiveContainer width="100%" height={230}><PieChart><Pie data={statusData} dataKey="value" nameKey="name" innerRadius={65} outerRadius={94} paddingAngle={2} onClick={d=>chartSelect({status:d.name})}>{statusData.map(x=><Cell key={x.name} fill={COLORS[x.name]}/>)}</Pie><ChartTooltip/></PieChart></ResponsiveContainer><div className="donut-center"><strong>{filtered.length}</strong><span>projects</span></div></div><Legend data={statusData} onSelect={s=>chartSelect({status:s})} selected={chartFilter?.status}/></article>
+    <article className="panel attention"><PanelHead title="Projects Requiring Attention" subtitle="Ranked by criticality and overdue conditions"/>{attention.length?<div className="attention-list">{attention.map((p,i)=><button key={p.id} onClick={()=>navigate('/projects/'+p.id+'/quality')}><span className="rank">{i+1}</span><span><strong>{p.name}</strong><small>{p.id+' / '+p.reason+(p.overdueNcr?' / '+p.overdueNcr+' overdue':'')}</small></span><span className="attention-score">{p.qhi??'-'}<Badge status={p.status} title={p.override||p.reason}/></span><ChevronRight/></button>)}</div>:<Empty text="No projects require attention in this view."/>}</article>
   </section>
 }
+function PanelHead({title,subtitle}){return <div className="panel-head"><h2>{title}</h2><p>{subtitle}</p></div>}
+function Legend({data=statuses.map(name=>({name})),onSelect,selected}){return <div className="legend">{data.map(x=><button key={x.name} className={selected===x.name?'selected':''} onClick={()=>onSelect(x.name)}><i style={{background:COLORS[x.name]}}/>{x.name}{x.value!=null&&<strong>{x.value}</strong>}</button>)}</div>}
+function Empty({text,action,onClick}){return <div className="empty"><CircleAlert/><strong>{text}</strong>{action&&<button onClick={onClick}>{action}</button>}</div>}
 
-function RevisionControl({ onUpload, setToast }) {
-  return <section className="panel revisions">
-    <div className="panel-head"><div><h2>Drawing & revision control</h2><p>GA, As-built and site acknowledgement linked to Conzol references.</p></div><Status tone="warning">1 wrong-revision alert</Status></div>
-    <div className="revision-layout">
-      <div className="upload-stack"><button onClick={onUpload}><CloudUpload /><span><strong>Upload GA drawing</strong><small>PDF / DWG · staged before Conzol</small></span></button><button onClick={onUpload}><CloudUpload /><span><strong>Upload As-built drawing</strong><small>PDF / DWG · preserve revision history</small></span></button></div>
-      <div className="revision-register">
-        <div className="drawing-title"><FileText /><div><strong>ME-RM4-0201</strong><small>Grinding System · Equipment Arrangement</small></div><Status tone="success">Rev.04 · Latest For Construction</Status></div>
-        <div className="revision-warning"><AlertTriangle size={17} />Site photo shows Rev.03 in use</div>
-        <div className="table-scroll"><table><thead><tr><th>Revision</th><th>Date</th><th>Status</th><th>Pending with</th><th>Site acknowledged</th></tr></thead><tbody>{revisions.map((row) => <tr key={row.revision}><td><strong>{row.revision}</strong></td><td>{row.date}</td><td>{row.status}</td><td>{row.pending}</td><td>{row.acknowledged}</td></tr>)}</tbody></table></div>
-        <div className="button-row"><button className="button button--secondary" onClick={() => setToast('Revision comparison opened in preview mode')}>Compare revisions</button><button className="button button--success" onClick={() => setToast('Rev.04 acknowledged for this user')}><CheckCircle2 />Acknowledge revision</button><button className="button button--warning" onClick={() => setToast('PM decision request sent')}><AlertTriangle />Request PM decision</button><button className="button button--secondary" onClick={() => setToast('Conzol reference opened in preview mode')}>Open in Conzol</button></div>
-      </div>
-    </div>
-  </section>
+function ProjectTable({loading,filtered,visible,sort,headerSort,navigate,clearFilters,page,setPage,pageSize,setPageSize}){
+  return <section className="panel table-panel"><div className="table-title"><div><h2>Project Quality Summary</h2><p>{filtered.length} visible projects / All values use the shared filtered dataset</p></div><span className="browser-note"><Info/>Prototype data is stored in this browser</span></div>
+  {loading?<Skeleton/>:filtered.length===0?<Empty text="No projects match the current filters." action="Clear filters" onClick={clearFilters}/>:<>
+    <div className="table-scroll"><table><thead><tr><SortTh label="Project" field="name" sort={sort} onSort={headerSort}/><th>Business Unit</th><th>Location</th><th>Project Type</th><SortTh label="Progress" field="scurveProgressPercent" sort={sort} onSort={headerSort}/><SortTh label="QHI" field="qhi" sort={sort} onSort={headerSort}/><SortTh label="Inspection Pass" field="inspectionPassRate" sort={sort} onSort={headerSort}/><SortTh label="Open NCR" field="openNcr" sort={sort} onSort={headerSort}/><SortTh label="Rework Cost" field="reworkPercent" sort={sort} onSort={headerSort}/><SortTh label="Punch Remaining" field="punchRemaining" sort={sort} onSort={headerSort}/><SortTh label="Client Score" field="clientSatisfactionScore" sort={sort} onSort={headerSort}/><th>30-Day QHI Trend</th><th>Quality Status</th><SortTh label="Last Updated" field="lastUpdated" sort={sort} onSort={headerSort}/><th>Action</th></tr></thead>
+    <tbody>{visible.map(p=><tr key={p.id} tabIndex="0" onClick={()=>navigate('/projects/'+p.id+'/quality')} onKeyDown={e=>{if(e.key==='Enter')navigate('/projects/'+p.id+'/quality')}}><td><strong>{p.name}</strong><small>{p.id}</small></td><td>{p.businessUnit}</td><td>{p.location}</td><td>{p.projectType}</td><td><span className="progress-label">{p.scurveProgressPercent}%</span><span className="progress"><i style={{width:p.scurveProgressPercent+'%'}}/></span></td><td><strong>{p.qhi??'-'}</strong><small>{p.qhi==null?'Excluded from portfolio QHI':''}</small></td><td>{p.inspectionPassRate?.toFixed(1)??'-'}%</td><td><strong>{p.openNcr}</strong><small>{p.overdueNcr} overdue / {p.openNcrCritical} critical</small></td><td><strong>{p.reworkPercent?.toFixed(2)??'-'}%</strong><small>{money(p.reworkCostThb)}</small></td><td>{p.punchRemaining}<small>{p.punchListOverdue} overdue</small></td><td>{p.clientSatisfactionScore?.toFixed(1)??'Not recorded'}</td><td><Spark data={p.trend}/></td><td><Badge status={p.status} title={p.override||p.reason}/></td><td>{new Date(p.lastUpdated).toLocaleDateString()}</td><td><Link className="view-link" to={'/projects/'+p.id+'/quality'} onClick={e=>e.stopPropagation()}>View Project</Link></td></tr>)}</tbody></table></div>
+    <div className="pagination"><label>Rows per page<select value={pageSize} onChange={e=>{setPageSize(Number(e.target.value));setPage(1)}}>{[10,25,50].map(n=><option key={n}>{n}</option>)}</select></label><span>{(page-1)*pageSize+1}-{Math.min(page*pageSize,filtered.length)} of {filtered.length}</span><button disabled={page===1} onClick={()=>setPage(p=>p-1)}>Previous</button><button disabled={page>=Math.ceil(filtered.length/pageSize)} onClick={()=>setPage(p=>p+1)}>Next</button></div>
+  </>}</section>
+}
+function SortTh({label,field,sort,onSort}){return <th><button onClick={()=>onSort(field)}>{label}{sort.key===field&&(sort.dir==='asc'?<ArrowUp/>:<ArrowDown/>)}</button></th>}
+function Spark({data}){return <div className="spark"><ResponsiveContainer width="100%" height={34}><LineChart data={data.map((v,i)=>({i,v}))}><Line type="monotone" dataKey="v" stroke="#1769C2" strokeWidth={2} dot={false}/></LineChart></ResponsiveContainer></div>}
+function Skeleton(){return <div className="skeleton" aria-label="Loading project quality data">{[1,2,3,4,5].map(x=><i key={x}/>)}</div>}
+
+function ImportModal({onClose,onImport}){
+  const input=useRef(),[workbook,setWorkbook]=useState(null),[sheet,setSheet]=useState(''),[rows,setRows]=useState([]),[error,setError]=useState(''),[mappings,setMappings]=useState({})
+  const parseSheet=(wb,name)=>{setRows(XLSX.utils.sheet_to_json(wb.Sheets[name],{defval:''}));setSheet(name)}
+  const openFile=async file=>{setError('');try{const wb=XLSX.read(await file.arrayBuffer(),{type:'array'});setWorkbook(wb);parseSheet(wb,wb.SheetNames[0])}catch{setError('The selected workbook could not be read. Check the file format and try again.')}}
+  const headers=rows[0]?Object.keys(rows[0]):[],missingColumns=requiredFields.filter(f=>!headers.includes(f)),mappedMissing=missingColumns.filter(f=>!mappings[f])
+  const validation=rows.map((source,index)=>{const r={...source};Object.entries(mappings).forEach(([target,origin])=>{if(origin)r[target]=source[origin]});const errors=[],warnings=[];if(!r.project_id)errors.push('Missing project ID');if(r.project_id&&rows.filter(x=>(x.project_id||x[mappings.project_id])===r.project_id).length>1)errors.push('Duplicate project ID');if(!['Planning','Active','On Hold','Closing','Completed'].includes(r.project_status))errors.push('Invalid project status');if(toNum(r.scurve_progress_percent)<0||toNum(r.scurve_progress_percent)>100)errors.push('Progress outside 0-100');if(toNum(r.rework_cost_thb)<0||toNum(r.actual_construction_cost_thb)<0)errors.push('Negative cost');if(r.client_satisfaction_score!==''&&(toNum(r.client_satisfaction_score)<0||toNum(r.client_satisfaction_score)>5))errors.push('Client score outside 0-5');if(toNum(r.passed_inspection_points)>toNum(r.completed_inspection_points))errors.push('Passed inspections exceed completed');if(toNum(r.first_pass_inspection_points)>toNum(r.completed_inspection_points))errors.push('First-pass inspections exceed completed');if(toNum(r.inspections_within_sla)>toNum(r.completed_inspection_points))errors.push('SLA inspections exceed completed');if(toNum(r.material_approval_approved)>toNum(r.material_approval_total))errors.push('Approved materials exceed total');if(toNum(r.incoming_material_accepted)>toNum(r.incoming_material_inspected))errors.push('Accepted materials exceed inspected');if(toNum(r.required_tests_passed)>toNum(r.required_tests_completed))errors.push('Passed tests exceed completed');if(toNum(r.punch_list_closed)>toNum(r.punch_list_total))errors.push('Closed punch items exceed total');if(!r.completed_inspection_points||!r.actual_construction_cost_thb||!r.required_tests_completed)warnings.push('Missing mandatory QHI input');if(r.reporting_date&&Number.isNaN(Date.parse(r.reporting_date)))errors.push('Invalid reporting date');return{row:index+2,data:r,errors,warnings}})
+  const valid=validation.filter(x=>!x.errors.length),warnings=validation.filter(x=>x.warnings.length&&!x.errors.length),errors=validation.filter(x=>x.errors.length)
+  const normalize=r=>Object.fromEntries(Object.entries(r).map(([k,v])=>[k==='project_id'?'id':k==='project_name'?'name':camel(k),typeof v==='string'&&v.trim()!==''&&!Number.isNaN(Number(v))?Number(v):v]))
+  const template=()=>{const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([requiredFields]),'Project Quality Data');XLSX.writeFile(wb,'project-quality-import-template.xlsx')}
+  const downloadErrors=()=>{const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(errors.map(x=>({row:x.row,project_id:x.data.project_id,errors:x.errors.join('; ')}))),'Validation Errors');XLSX.writeFile(wb,'quality-import-errors.xlsx')}
+  return <div className="modal-layer" role="dialog" aria-modal="true" aria-labelledby="import-title"><button className="modal-scrim" onClick={onClose} aria-label="Close import dialog"/><section className="modal"><header><div><h2 id="import-title">Import Project Quality Data</h2><p>Validate Excel or CSV records before saving them in this browser.</p></div><button className="icon-button" onClick={onClose} aria-label="Close"><X/></button></header><div className="modal-body"><div className="import-toolbar"><button className="button secondary" onClick={template}><Download/>Download Template</button><span>.xlsx, .xls and .csv supported</span></div><button className="dropzone" onClick={()=>input.current.click()} onDrop={e=>{e.preventDefault();openFile(e.dataTransfer.files[0])}} onDragOver={e=>e.preventDefault()}><FileSpreadsheet/><strong>Drop a workbook here or choose a file</strong><span>Prototype data remains on this device.</span></button><input ref={input} hidden type="file" accept=".xlsx,.xls,.csv" onChange={e=>openFile(e.target.files[0])}/>{error&&<div className="error"><AlertTriangle/>{error}</div>}
+  {workbook&&<><label className="sheet-select">Workbook sheet<select value={sheet} onChange={e=>parseSheet(workbook,e.target.value)}>{workbook.SheetNames.map(n=><option key={n}>{n}</option>)}</select></label>{missingColumns.length>0&&<div className="error"><AlertTriangle/><span><strong>{mappedMissing.length} required columns still need mapping.</strong><small>Choose the matching source column for each required field below.</small></span></div>}<ColumnMapper fields={missingColumns} headers={headers} mappings={mappings} setMappings={setMappings}/><div className="validation"><div><strong>{valid.length}</strong><span>Valid rows</span></div><div className="warning"><strong>{warnings.length}</strong><span>Warning rows</span></div><div className="bad"><strong>{errors.length}</strong><span>Error rows</span></div></div><div className="preview"><table><thead><tr><th>Row</th><th>Project ID</th><th>Project name</th><th>Result</th></tr></thead><tbody>{validation.slice(0,8).map(x=><tr key={x.row}><td>{x.row}</td><td>{x.data.project_id||'-'}</td><td>{x.data.project_name||'-'}</td><td className={x.errors.length?'bad-text':x.warnings.length?'warn-text':'ok-text'}>{x.errors.join('; ')||x.warnings.join('; ')||'Valid'}</td></tr>)}</tbody></table></div>{errors.length>0&&<button className="text-action" onClick={downloadErrors}>Download validation errors</button>}</>}</div><footer><button className="button secondary" onClick={onClose}>Cancel</button><button className="button primary" disabled={!valid.length||mappedMissing.length>0} onClick={()=>onImport(valid.map(x=>normalize(x.data)))}>Import {valid.length} Valid Rows</button></footer></section></div>
 }
 
-function AttentionPanel() {
-  return <section className="panel attention-panel"><div className="panel-head"><div><h2>Management attention</h2><p>Owners, elapsed time and decision deadlines.</p></div><span>6 open</span></div>{attention.map((item) => <button className="attention-item" key={item.title}><span className={`attention-icon attention-icon--${item.icon}`}>{item.icon === 'critical' ? <ShieldCheck /> : item.icon === 'warning' ? <AlertTriangle /> : <FileText />}</span><span><strong>{item.title}</strong><small>{item.meta}</small><em>{item.age}</em><b>{item.deadline}</b></span><ArrowRight /></button>)}</section>
-}
+function ProjectDetail(){const {projectId}=useParams();let list;try{list=JSON.parse(localStorage.getItem(STORE))||demoProjects}catch{list=demoProjects}const p=enrich(list.find(x=>x.id===projectId)||demoProjects.find(x=>x.id===projectId)||demoProjects[0]);return <div className="detail-page"><header><Link to="/" className="back"><ArrowLeft/>Back to Overview</Link></header><main><div className="detail-heading"><span className="logo-mark"><Building2/></span><div><p>{p.id}</p><h1>{p.name}</h1><span>{p.location} / {p.businessUnit}</span></div><Badge status={p.status} title={p.override||p.reason}/></div><section className="detail-grid"><dl><div><dt>Project ID</dt><dd>{p.id}</dd></div><div><dt>Location</dt><dd>{p.location}</dd></div><div><dt>Business unit</dt><dd>{p.businessUnit}</dd></div><div><dt>Project status</dt><dd>{p.projectStatus}</dd></div><div><dt>Current QHI</dt><dd>{p.qhi??'Insufficient Data'}</dd></div></dl><div className="coming"><HardHat/><h2>Project Quality Detail - Coming Next</h2><p>The complete single-project QA/QC dashboard is outside this prototype scope.</p><Link className="button primary" to="/">Back to Overview</Link></div></section></main></div>}
 
-function PMReview({ setToast }) {
-  return <section className="panel pm-review"><div className="panel-head"><div><h2>PM review from anywhere</h2><p>Photo, drawing delta and impact in one decision.</p></div></div><div className="pm-evidence"><img src={photoSeeds[1]} alt="Site evidence" /><div className="drawing-delta"><PenLine /><span>3 marked changes</span></div></div><dl><div><dt>Owner</dt><dd>S. Chai · Contractor</dd></div><div><dt>Cost impact</dt><dd>฿125,000</dd></div><div><dt>Delay impact</dt><dd>3 days · High</dd></div></dl><div className="decision-row"><button className="button button--success" onClick={() => setToast('PM decision approved and recorded')}><Check />Approve</button><button className="button button--danger" onClick={() => setToast('Item returned with PM comment')}><RotateCcw />Return</button></div></section>
-}
-
-function ProgressPage({ onUpdate, setToast }) {
-  return <><PageTitle eyebrow="Approved records drive the official S-Curve" title="Progress control" text="Review submissions, evidence and reporting-period locks." action={<button className="button button--primary" onClick={onUpdate}><Plus />Update progress</button>} /><section className="stats-row"><Stat label="Approved actual" value="62.3%" note="Official" /><Stat label="Plan" value="67.0%" note="30 Sep 2025" /><Stat label="Pending" value="7.8%" note="Not yet official" /><Stat label="Reporting period" value="Open" note="Closes 02 Oct" /></section><section className="panel chart-panel"><div className="panel-head"><div><h2>S-Curve · Cumulative progress</h2><p>Baseline v1 · approved actual only</p></div><Status tone="warning">4 pending review</Status></div><SCurve /></section><section className="panel"><div className="panel-head"><div><h2>Activity approval queue</h2><p>Plan, previous actual, submitted actual and evidence.</p></div></div><ActivityTable setToast={setToast} /></section></>
-}
-
-function ActivityTable({ setToast }) { return <div className="table-scroll"><table><thead><tr><th>Activity ID</th><th>Activity</th><th>WBS</th><th>Previous</th><th>Submitted</th><th>Evidence</th><th>Owner</th><th>Status</th><th /></tr></thead><tbody>{activities.map((row) => <tr key={row.id}><td><strong>{row.id}</strong></td><td>{row.activity}</td><td>{row.wbs}</td><td>{row.previous}%</td><td><strong>{row.submitted}%</strong></td><td>{row.evidence} files</td><td>{row.owner}</td><td><Status tone={row.status === 'Approved' ? 'success' : row.status === 'Returned' ? 'danger' : 'warning'}>{row.status} · {row.age}</Status></td><td><button className="table-action" onClick={() => setToast(`${row.id} opened for review`)}>Review</button></td></tr>)}</tbody></table></div> }
-
-function SiteUpdatesPage({ onIssue, setToast }) { return <><PageTitle eyebrow="Mobile-first evidence capture" title="Site updates" text="Post activity progress, photos and issues from the field." action={<button className="button button--primary" onClick={onIssue}><Camera />Report site issue</button>} /><SiteFeed onAdd={onIssue} setToast={setToast} /><section className="panel offline-card"><Wifi /><div><h2>Low-bandwidth ready</h2><p>Drafts and compressed evidence are queued locally when the connection drops.</p></div><Status tone="success">Online · synced</Status></section></> }
-
-function QualityPage({ issues, onIssue, setToast }) { return <><PageTitle eyebrow="Quality and change control" title="QA/QC control center" text="Classify issues, manage NCRs, inspect rectification and confirm CQD impact." action={<button className="button button--primary" onClick={onIssue}><Plus />New site issue</button>} /><section className="stats-row"><Stat label="Open issues" value={issues.length} note="3 critical" /><Stat label="Open NCR" value="7" note="2 overdue" /><Stat label="First-time pass" value="78%" note="This month" /><Stat label="Evidence complete" value="92%" note="Closure ready" /></section><section className="panel"><div className="tabs"><button className="is-active">Issues / NCR</button><button>Inspections</button><button>Corrective actions</button><button>Root cause & CQD</button></div><IssueTable issues={issues} setToast={setToast} /></section></> }
-
-function IssueTable({ issues, setToast }) { return <div className="table-scroll"><table><thead><tr><th>ID</th><th>Type / issue</th><th>Severity</th><th>Pending with</th><th>Pending</th><th>SLA</th><th>Related activity</th><th>Revision</th><th /></tr></thead><tbody>{issues.map((issue) => <tr key={issue.id}><td><strong>{issue.id}</strong></td><td><strong>{issue.type}</strong><small className="cell-note">{issue.title}</small></td><td><Status tone={issue.severity === 'Critical' ? 'danger' : issue.severity === 'Major' ? 'warning' : 'info'}>{issue.severity}</Status></td><td>{issue.pending}</td><td>{issue.age} days</td><td>{issue.due}</td><td>{issue.activity}</td><td>{issue.revision}</td><td>{setToast && <button className="table-action" onClick={() => setToast(`${issue.id} issue detail opened`)}>Open</button>}</td></tr>)}</tbody></table></div> }
-
-function DrawingsPage({ onUpload, setToast }) { return <><PageTitle eyebrow="Conzol remains the official document source" title="Drawings & revisions" text="Control metadata, references, acknowledgement and work-start warnings." action={<button className="button button--primary" onClick={onUpload}><Upload />Upload drawing</button>} /><section className="stats-row"><Stat label="For Construction" value="86%" note="Approved" /><Stat label="Awaiting acknowledgement" value="6" note="2 active areas" /><Stat label="Overdue approvals" value="4" note="Pending with Designer" /><Stat label="Wrong revision alerts" value="3" note="Requires attention" /></section><RevisionControl onUpload={onUpload} setToast={setToast} /></> }
-
-function MyWorkPage({ onAction }) { return <><PageTitle eyebrow="Arun K. · Project Manager" title="My Work" text="Prioritized actions across progress, quality, documents and decisions." /><section className="work-list"><WorkCard title="Progress approvals" count="4" note="Oldest pending 5 days" icon={BarChart3} onClick={() => onAction('progress')} /><WorkCard title="PM decisions" count="6" note="2 due today" icon={ClipboardCheck} onClick={() => onAction('issue')} /><WorkCard title="Revisions to acknowledge" count="3" note="1 affects active work" icon={FileCheck2} onClick={() => onAction('drawing')} /><WorkCard title="Inspections" count="5" note="2 ready for closure" icon={ShieldCheck} onClick={() => onAction('issue')} /></section><section className="panel"><div className="panel-head"><div><h2>Due next</h2><p>Ordered by impact and decision deadline.</p></div></div>{attention.map((item) => <div className="task-row" key={item.title}><AlertTriangle /><div><strong>{item.title}</strong><small>{item.meta} · {item.age}</small></div><span>{item.deadline}</span><button>Open</button></div>)}</section></> }
-
-function WorkCard({ title, count, note, icon: Icon, onClick }) { return <button className="work-card" onClick={onClick}><span><Icon /></span><div><strong>{count}</strong><h2>{title}</h2><p>{note}</p></div><ArrowRight /></button> }
-
-function DocumentsPage({ onUpload }) { return <><PageTitle eyebrow="Metadata synchronized from the official register" title="Documents" text="Search Conzol references without duplicating controlled files." action={<button className="button button--primary" onClick={onUpload}><Upload />Stage document</button>} /><section className="panel"><div className="document-toolbar"><label><Search /><input placeholder="Search document number or title" /></label><Status tone="success">Conzol export · synced 09:14</Status></div><div className="empty-state"><FolderOpen /><h2>Document register preview</h2><p>The MVP stores document metadata, workflow state and Conzol references. Official files remain in Conzol.</p><button className="button button--secondary" onClick={onUpload}>Stage GA / As-built metadata</button></div></section></> }
-
-function PortfolioPage({ onOpen }) { return <><PageTitle eyebrow="37 S-Curve source workbooks · 3 verified template families" title="Portfolio map" text="Project progress, critical quality issues and management alerts." /><section className="portfolio-grid"><div className="panel map-panel"><div className="map-toolbar"><strong>Thailand projects</strong><div><Status tone="success">On plan</Status><Status tone="warning">At risk</Status><Status tone="danger">Delayed</Status></div></div><div className="map-canvas"><svg viewBox="0 0 360 620" aria-label="Schematic project map of Thailand"><path d="M142 17c37 25 31 78 55 113 15 23 69 41 72 81 4 51-57 70-63 116-4 31 22 61 20 101-2 43-35 62-48 100-9 27 1 55-15 75-14 17-42-3-40-29 3-45 31-76 22-123-7-39-37-70-31-112 6-44 38-63 33-108-5-47-50-78-47-124 2-39 31-57 44-88 14-33 15-107 52-125z" /></svg>{projects.map((item) => <button key={item.id} className={`map-marker map-marker--${item.status}`} style={{ left: `${item.x}%`, top: `${item.y}%` }} onClick={() => onOpen(item.id)}><MapPin /><span>{item.short}<small>{item.progress}% · {item.location}</small></span></button>)}</div></div><div className="panel portfolio-list"><div className="panel-head"><div><h2>Projects</h2><p>Click any project to open its workspace.</p></div></div>{projects.map((item) => <button key={item.id} onClick={() => onOpen(item.id)}><span className={`project-dot project-dot--${item.status}`} /><span><strong>{item.name}</strong><small>{item.location} · {item.template}</small></span><b>{item.progress}%</b><ArrowRight /></button>)}</div></section></> }
-
-function PageTitle({ eyebrow, title, text, action }) { return <section className="page-title"><div><p className="eyebrow">{eyebrow}</p><h1>{title}</h1><p>{text}</p></div>{action}</section> }
-function Stat({ label, value, note }) { return <div className="stat"><span>{label}</span><strong>{value}</strong><small>{note}</small></div> }
-
-function IssueDrawer({ onClose, onSubmit }) {
-  const [files, setFiles] = useState([])
-  const [form, setForm] = useState({ activity: 'A-04210 · Structure Installation', area: 'Area 2 / Grid C12–C15', type: 'Drawing mismatch', drawing: 'ME-RM4-0201', revision: 'Rev.03', description: 'Site photo shows Rev.03 in use, but Rev.04 is the latest For Construction.', severity: 'Critical', owner: 'S. Rungrot · Site', due: '2025-10-04' })
-  const update = (key) => (e) => setForm({ ...form, [key]: e.target.value })
-  const addFiles = (fileList) => setFiles((current) => [...current, ...Array.from(fileList).slice(0, 4).map((file) => ({ name: file.name, url: URL.createObjectURL(file) }))])
-  const submit = (event) => { event.preventDefault(); onSubmit({ id: `SI-${String(Date.now()).slice(-4)}`, type: form.type, title: form.description, severity: form.severity, pending: form.owner, age: 0, due: form.due, activity: form.activity.split(' · ')[0], revision: `${form.revision} submitted`, status: 'QA/QC review' }) }
-  return <div className="drawer-layer"><button className="drawer-scrim" aria-label="Close issue form" onClick={onClose} /><aside className="drawer" aria-label="Report site issue"><div className="drawer-head"><div><p className="eyebrow">Site issue · New</p><h2>Report site issue</h2><p>Capture evidence, location and revision used.</p></div><button className="icon-button" onClick={onClose}><X /></button></div><form onSubmit={submit}>
-    <fieldset><legend><b>1</b>Add site photos</legend><div className="photo-upload-row"><label className="upload-button"><Camera />Take photo<input type="file" accept="image/*" capture="environment" onChange={(e) => addFiles(e.target.files)} /></label><label className="upload-button"><ImagePlus />Upload photos<input type="file" accept="image/*" multiple onChange={(e) => addFiles(e.target.files)} /></label></div><div className="photo-preview">{files.length ? files.map((file) => <figure key={file.url}><img src={file.url} alt={file.name} /><button type="button" onClick={() => setFiles((list) => list.filter((item) => item.url !== file.url))}><X /></button></figure>) : photoSeeds.slice(0, 3).map((src, i) => <figure key={src}><img src={src} alt={`Example site evidence ${i + 1}`} /></figure>)}</div><button className="markup-button" type="button"><PenLine />Mark up photo</button></fieldset>
-    <fieldset><legend><b>2</b>Work context</legend><div className="form-grid"><Field label="Activity"><select value={form.activity} onChange={update('activity')}><option>A-04210 · Structure Installation</option><option>A-04220 · Equipment Installation</option><option>A-04120 · Procurement & M/C Delivery</option></select></Field><Field label="Area / Grid"><input value={form.area} onChange={update('area')} /></Field></div></fieldset>
-    <fieldset><legend><b>3</b>Issue and drawing</legend><div className="form-grid form-grid--3"><Field label="Issue type"><select value={form.type} onChange={update('type')}><option>Drawing mismatch</option><option>Design conflict</option><option>Requirement change</option><option>Installation defect</option><option>Material issue</option><option>NCR</option></select></Field><Field label="Drawing used"><input value={form.drawing} onChange={update('drawing')} /></Field><Field label="Revision used"><select value={form.revision} onChange={update('revision')}><option>Rev.03</option><option>Rev.04</option><option>Unknown</option></select></Field></div><Field label="Description"><textarea rows="3" value={form.description} onChange={update('description')} /></Field></fieldset>
-    <fieldset><legend><b>4</b>Ownership and SLA</legend><div className="form-grid form-grid--3"><Field label="Severity"><select value={form.severity} onChange={update('severity')}><option>Critical</option><option>Major</option><option>Minor</option></select></Field><Field label="Assign to"><select value={form.owner} onChange={update('owner')}><option>S. Rungrot · Site</option><option>E. Eng · Engineering</option><option>QA/QC Manager</option></select></Field><Field label="Required response date"><input type="date" value={form.due} onChange={update('due')} /></Field></div></fieldset>
-    <div className="drawer-actions"><button type="button" className="button button--secondary" onClick={onClose}>Save draft</button><button className="button button--primary" type="submit">Submit issue</button></div>
-  </form></aside></div>
-}
-
-function ProgressDialog({ onClose, onSubmit }) { const [actual, setActual] = useState(45); return <Modal title="Update progress" subtitle="A-04210 · Structure Installation" onClose={onClose}><div className="progress-context"><Stat label="Plan" value="52%" note="30 Sep" /><Stat label="Previous approved" value="35%" note="20 Sep" /><Stat label="New actual" value={`${actual}%`} note="Draft" /></div><Field label="New actual progress"><input type="range" min="35" max="100" value={actual} onChange={(e) => setActual(e.target.value)} /></Field><Field label="Work completed"><textarea rows="3" defaultValue="Column C12–C15 installation completed with alignment check." /></Field><Field label="Forecast finish"><input type="date" defaultValue="2025-10-18" /></Field><label className="drop-zone"><ImagePlus /><strong>Add progress photos</strong><small>Evidence required for increases over 10%</small><input type="file" multiple accept="image/*" /></label><div className="modal-actions"><button className="button button--secondary" onClick={onClose}>Save draft</button><button className="button button--primary" onClick={onSubmit}>Submit for review</button></div></Modal> }
-
-function DrawingDialog({ onClose, onSubmit }) { const [kind, setKind] = useState('GA'); return <Modal title="Upload drawing" subtitle="Stage metadata and file before document-control review" onClose={onClose}><div className="segmented"><button className={kind === 'GA' ? 'is-active' : ''} onClick={() => setKind('GA')}>GA drawing</button><button className={kind === 'As-built' ? 'is-active' : ''} onClick={() => setKind('As-built')}>As-built drawing</button></div><div className="form-grid"><Field label="Drawing number"><input defaultValue="ME-RM4-0201" /></Field><Field label="Revision"><input defaultValue="Rev.05" /></Field></div><Field label="Drawing title"><input defaultValue="Grinding System · Equipment Arrangement" /></Field><label className="drop-zone"><CloudUpload /><strong>Drop PDF / DWG here</strong><small>The official controlled file will remain in Conzol after review.</small><input type="file" accept=".pdf,.dwg,.dxf" /></label><div className="modal-actions"><button className="button button--secondary" onClick={onClose}>Cancel</button><button className="button button--primary" onClick={() => onSubmit(kind)}>Upload to staging</button></div></Modal> }
-
-function Modal({ title, subtitle, onClose, children }) { return <div className="modal-layer"><button className="modal-scrim" onClick={onClose} aria-label="Close dialog" /><section className="modal"><div className="drawer-head"><div><h2>{title}</h2><p>{subtitle}</p></div><button className="icon-button" onClick={onClose}><X /></button></div>{children}</section></div> }
-function Field({ label, children }) { return <label className="field"><span>{label}</span>{children}</label> }
-
-export default App
+function ColumnMapper({fields,headers,mappings,setMappings}){if(!fields.length)return null;return <div className="mapping"><strong>Column mapping</strong><div>{fields.map(field=><label key={field}><span>{field}</span><select value={mappings[field]||''} onChange={e=>setMappings(current=>({...current,[field]:e.target.value}))}><option value="">Select source column</option>{headers.map(header=><option key={header} value={header}>{header}</option>)}</select></label>)}</div></div>}

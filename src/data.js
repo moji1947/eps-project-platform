@@ -1,35 +1,18 @@
-export const projects = [
-  { id: 'EPS-STS-SG', name: 'Separate Grinding, STS', short: 'Separate Grinding, STS', location: 'Saraburi', status: 'at-risk', progress: 62.3, plan: 67, issues: 4, template: 'EPS Standard', x: 59, y: 46 },
-  { id: 'EPS-SLP-SOLAR', name: 'SLP Solar Roof 0.97 MWp', short: 'SLP Solar Roof 0.97 MWp', location: 'Lampang', status: 'on-plan', progress: 48.1, plan: 49, issues: 1, template: 'EPS Standard', x: 50, y: 26 },
-  { id: 'EPS-SWCC-SOLAR', name: 'SF SWCC 4.027 MWp', short: 'SF SWCC 4.027 MWp', location: 'Chonburi', status: 'at-risk', progress: 36.8, plan: 42, issues: 3, template: 'Solar + PR/PO', x: 69, y: 59 },
-  { id: 'EPS-MIC-BOILER', name: 'Michelin Boiler', short: 'Michelin Boiler', location: 'Rayong', status: 'on-plan', progress: 54.6, plan: 56, issues: 2, template: 'Michelin P/F/A', x: 72, y: 65 },
-  { id: 'EPS-STS-BIO', name: 'STS Biomass Power Plant', short: 'STS Biomass Power Plant', location: 'Saraburi', status: 'delayed', progress: 71.4, plan: 79, issues: 5, template: 'EPS Standard', x: 57, y: 43 },
-  { id: 'EPS-SKK5-COOL', name: 'SKK5 Cooler Modification', short: 'SKK5 Cooler Modification', location: 'Saraburi', status: 'finished', progress: 100, plan: 100, issues: 0, template: 'EPS Standard', x: 62, y: 42 },
-]
+export const demoProjects = [
+  ['QO-101','Eastern Link Viaduct','Construction Services','Rayong','Infrastructure','Active',68,64,420,380,1,0,1,12,6500000,210000000,38,25,3,4.1,'2026-08-02',false,false],
+  ['QO-102','Saraburi Kiln Upgrade','Cement','Saraburi','Industrial upgrade','Active',57,91,630,596,0,1,0,4,2100000,160000000,17,12,1,4.5,'2026-08-03',false,false],
+  ['QO-103','Lamphun Plant Utilities','Engineering','Lamphun','Utilities','Active',42,75,320,240,0,0,0,7,3900000,105000000,26,16,6,3.8,'2026-07-22',false,false],
+  ['QO-104','Chonburi Solar Canopy','Industrial Solutions','Chonburi','Renewable energy','Closing',93,96,180,173,0,0,0,0,420000,84000000,8,7,0,4.7,'2026-08-03',false,false],
+  ['QO-105','Bang Pa-in Distribution Hub','Construction Services','Ayutthaya','Logistics','On Hold',31,69,90,62,0,0,0,11,1800000,98000000,34,17,12,null,'2026-07-19',false,false],
+  ['QO-106','Mae Moh Material Handling','Cement','Lampang','Material handling','Active',76,87,510,444,0,1,0,3,2700000,185000000,22,18,2,4.0,'2026-08-01',false,false],
+  ['QO-107','Korat Waste Heat Recovery','Engineering','Nakhon Ratchasima','Energy recovery','Planning',9,null,null,null,0,0,0,0,0,0,0,0,0,null,'2026-07-12',false,false],
+  ['QO-108','Phuket Resort Fit-out','Other','Phuket','Commercial fit-out','Completed',100,94,260,244,0,0,0,1,750000,76000000,14,14,0,4.8,'2026-08-03',false,false],
+  ['QO-109','Samut Prakan Blending Line','Cement','Samut Prakan','Production line','Active',51,72,370,267,0,0,0,8,5100000,122000000,31,19,8,3.5,'2026-07-25',true,false],
+  ['QO-110','Laem Chabang Jetty Repair','Construction Services','Chonburi','Marine repair','Active',64,82,410,336,0,0,0,5,1200000,140000000,19,14,3,4.2,'2026-08-02',false,false],
+  ['QO-111','Pathum Thani Office Retrofit','Other','Pathum Thani','Commercial retrofit','Closing',88,90,210,189,0,0,0,2,680000,52000000,11,9,0,4.4,'2026-08-01',false,false],
+  ['QO-112','Map Ta Phut Tank Farm','Industrial Solutions','Rayong','Tank farm','Active',37,78,285,222,0,0,0,6,3400000,132000000,28,16,7,3.2,'2026-07-18',false,true],
+].map(([id,name,businessUnit,location,projectType,projectStatus,progress,passRate,completed,passed,critical,major,minor,overdue,rework,actual,punchTotal,punchClosed,punchOverdue,satisfaction,lastUpdated,criticalTest,holdBypass]) => ({
+  id,name,businessUnit,location,projectType,projectStatus,reportingDate:'2026-08-01',scurveProgressPercent:progress,completedInspectionPoints:completed,passedInspectionPoints:passed,firstPassInspectionPoints:passed ? Math.max(0,passed-12) : null,inspectionsWithinSla:completed ? completed-8 : null,openNcrMinor:minor,openNcrMajor:major,openNcrCritical:critical,overdueNcr:overdue,closedNcr:14,ncrClosedWithinSla:11,repeatIssueCount:minor,correctiveActionTotal:18,correctiveActionClosedWithinSla:14,reworkCostThb:rework,actualConstructionCostThb:actual,materialApprovalTotal:20,materialApprovalApproved:19,incomingMaterialInspected:16,incomingMaterialAccepted:15,requiredTestsCompleted:12,requiredTestsPassed:11,unresolvedCriticalTest:criticalTest,punchListTotal:punchTotal,punchListClosed:punchClosed,punchListClosedWithinSla:Math.max(0,punchClosed-2),punchListOverdue:punchOverdue,clientSatisfactionScore:satisfaction,clientSatisfactionRecorded:satisfaction !== null,formalStopWorkQuality:false,holdPointBypassed:holdBypass,lastUpdated,responsibleTeam:`${businessUnit} QA/QC`,trend:[78,79,80,78,81,82,80,84,83,86].map((v,i)=>v+((Number(id.slice(-1))*3+i)%9-4))
+}))
 
-export const activities = [
-  { id: 'A-04120', activity: 'Procurement & M/C Delivery', wbs: '2.4.1', previous: 48, submitted: 62, evidence: 12, owner: 'P. Chai', status: 'Pending review', age: '4 days' },
-  { id: 'A-04130', activity: 'Basic Engineering', wbs: '2.3.1', previous: 90, submitted: 100, evidence: 8, owner: 'E. Eng', status: 'Pending review', age: '2 days' },
-  { id: 'A-04150', activity: 'Site Mobilization', wbs: '1.2.1', previous: 100, submitted: 100, evidence: 10, owner: 'S. Manee', status: 'Approved', age: 'Today' },
-  { id: 'A-04210', activity: 'Structure Installation', wbs: '3.1.1', previous: 35, submitted: 45, evidence: 18, owner: 'S. Chai', status: 'Returned', age: '1 day' },
-  { id: 'A-04220', activity: 'Equipment Installation', wbs: '3.2.1', previous: 12, submitted: 18, evidence: 9, owner: 'M. Chai', status: 'Pending review', age: '5 days' },
-]
-
-export const initialIssues = [
-  { id: 'SI-0241', type: 'Drawing mismatch', title: 'Rev.03 used at Grid C12–C15', severity: 'Critical', pending: 'S. Rungrot · Site', age: 5, due: '04 Oct 2025', activity: 'A-04210', revision: 'Rev.04 pending acknowledgement', status: 'Engineering review' },
-  { id: 'NCR-0088', type: 'Installation defect', title: 'Equipment base alignment outside tolerance', severity: 'Major', pending: 'S. Chai · Contractor', age: 2, due: '03 Oct 2025', activity: 'A-04220', revision: 'Rev.02 acknowledged', status: 'Rectification' },
-  { id: 'SI-0236', type: 'Requirement change', title: 'Access platform width adjustment', severity: 'Minor', pending: 'E. Eng · Engineering', age: 1, due: '05 Oct 2025', activity: 'A-04130', revision: 'Rev.04 acknowledged', status: 'Technical decision' },
-]
-
-export const revisions = [
-  { revision: 'Rev.04', date: '30 Sep 2025', status: 'Latest For Construction', pending: 'S. Chai · Contractor', acknowledged: '12 / 18', activity: 'A-04210' },
-  { revision: 'Rev.03', date: '27 Sep 2025', status: 'Superseded', pending: '—', acknowledged: '18 / 18', activity: 'A-04210' },
-  { revision: 'Rev.02', date: '20 Sep 2025', status: 'For Review', pending: 'E. Eng · Engineering', acknowledged: '16 / 18', activity: 'A-04130' },
-]
-
-export const attention = [
-  { icon: 'warning', title: 'Procurement & M/C Delivery', meta: 'P. Chai · WBS 2.4.1', age: 'Pending 4 days', deadline: 'Decision by 04 Oct 2025' },
-  { icon: 'critical', title: 'SI-0241 · Drawing mismatch', meta: 'S. Rungrot · WBS 3.1.1', age: 'Pending 5 days', deadline: 'Decision by 02 Oct 2025' },
-  { icon: 'warning', title: 'Installation quality hold', meta: 'S. Chai · WBS 3.2.1', age: 'Pending 3 days', deadline: 'Decision by 03 Oct 2025' },
-  { icon: 'info', title: 'Drawing revision awaiting acknowledgement', meta: 'ME-RM4-0201 · Rev.04', age: 'Pending 2 days', deadline: 'Decision by 05 Oct 2025' },
-]
+export const requiredFields = ['project_id','project_name','business_unit','location','project_type','project_status','reporting_date','scurve_progress_percent','completed_inspection_points','passed_inspection_points','first_pass_inspection_points','inspections_within_sla','open_ncr_minor','open_ncr_major','open_ncr_critical','overdue_ncr','closed_ncr','ncr_closed_within_sla','repeat_issue_count','corrective_action_total','corrective_action_closed_within_sla','rework_cost_thb','actual_construction_cost_thb','material_approval_total','material_approval_approved','incoming_material_inspected','incoming_material_accepted','required_tests_completed','required_tests_passed','unresolved_critical_test','punch_list_total','punch_list_closed','punch_list_closed_within_sla','punch_list_overdue','client_satisfaction_score','client_satisfaction_recorded','formal_stop_work_quality','hold_point_bypassed','last_updated']
