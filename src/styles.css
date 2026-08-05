@@ -107,7 +107,7 @@
 .status-panel .donut-wrap{height:230px}.status-panel .legend{padding-bottom:16px}
 .qhi-value{display:inline-flex!important;align-items:center;gap:7px;font-family:"IBM Plex Mono",monospace}.qhi-value i{width:9px;height:9px;border-radius:50%;background:#778397}
 .qhi-value--excellent{color:#15803d}.qhi-value--excellent i{background:#15803d}.qhi-value--good{color:#6a982e}.qhi-value--good i{background:#7cb342}.qhi-value--risk{color:#a77900}.qhi-value--risk i{background:#f2b705}.qhi-value--critical{color:#d83a3a}.qhi-value--critical i{background:#d83a3a}
-.client-score{display:inline-flex;align-items:center;gap:5px}.client-score i{color:#f2b705;font-style:normal}
+.client-score{display:inline-flex;align-items:center;gap:6px}.client-score svg{width:15px;height:15px;fill:#f2b705;color:#c99000}
 .view-link{display:grid;place-items:center;width:34px;height:34px;border:1px solid var(--line);border-radius:7px;background:#fff}.view-link:hover{border-color:#7ea3cf;background:#eef3fb}.view-link svg{width:16px}
 @media(max-width:700px){.location-layout,.location-donut{grid-template-columns:1fr}}
 
@@ -119,7 +119,7 @@
 .kpi[data-tone=blue]{--tone:#1769c2;--tone-soft:#eaf3ff}.kpi[data-tone=cyan]{--tone:#1686a0;--tone-soft:#e8f7fa}.kpi[data-tone=orange]{--tone:#e47700;--tone-soft:#fff1e4}.kpi[data-tone=purple]{--tone:#7c3fa0;--tone-soft:#f4eefa}.kpi[data-tone=teal]{--tone:#168a7d;--tone-soft:#e9f7f5}.kpi[data-tone=gold]{--tone:#c99000;--tone-soft:#fff7dc}
 .kpi[data-tone] .kpi-icon{color:var(--tone);background:var(--tone-soft)}.kpi[data-tone] .kpi-value{color:var(--tone)}
 .kpi-trend{width:100%;height:24px;margin:2px 0;color:var(--tone);overflow:visible}.kpi-trend polyline{fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}.kpi-trend circle{fill:currentColor}
-.kpi[data-tone] .change{color:#52647b}.kpi[data-tone]::after{content:"";position:absolute;right:-28px;top:-34px;width:88px;height:88px;border-radius:50%;background:var(--tone-soft);opacity:.75;z-index:0}.kpi[data-tone]>*{position:relative;z-index:1}
+.kpi[data-tone] .change{color:#52647b}
 .map-stage{position:relative;min-height:260px;overflow:hidden}.map-stage .google-map{width:100%;height:260px;display:block}
 .map-pin{position:absolute;z-index:3;display:grid;place-items:center;transform:translate(-50%,-50%);padding:0;border:0;background:transparent;color:#16253d}
 .map-pin>span{width:30px;height:30px;display:grid;place-items:center;border:3px solid #fff;border-radius:50% 50% 50% 0;transform:rotate(-45deg);color:#fff;background:var(--pin-color);box-shadow:0 4px 12px rgba(8,42,87,.28);font-size:.7rem;font-weight:800}
